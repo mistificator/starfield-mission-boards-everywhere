@@ -12,3 +12,12 @@ MISSION BOARDS EVERYWHERE! MI$$IOИ BOAЯД$ ЭVEЯYФHEЯE! - Starfield mod
       > bat mb
       
 3. Enjoy mission board after exiting generic vertical operable terminals
+
+* Welcome message at top-right corner
+![Welcome message at top-right corner](mb1.png)
+* Terminal is processed
+![Welcome message at top-right corner](mb2.png)
+* Redesigned interface
+![Welcome message at top-right corner](mb3.png)
+* Mission board on exit
+![Welcome message at top-right corner](mb4.png)
