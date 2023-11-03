@@ -1,0 +1,3 @@
+Player.AttachPapyrusScript ScriptObject
+ReloadScript mb
+Player.AttachPapyrusScript mb
