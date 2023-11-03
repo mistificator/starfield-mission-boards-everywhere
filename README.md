@@ -4,7 +4,7 @@ MISSION BOARDS EVERYWHERE! MI$$IOИ BOAЯД$ ЭVEЯYФHEЯE! - Starfield mod
 1. Unpack file 
       > mb.zip
       
-   to
+   from [releases](https://github.com/mistificator/starfield-mission-boards-everywhere/releases) section to
    
       > %USERPROFILE%\Documents\My Games\
       
