@@ -1,26 +1,30 @@
 ScriptName mb Extends ScriptObject
-{Mission board on every standing terminal}
+{Access to mission board on some standing terminals via scanner}
 
-Int iTimerID = 1000 Const;
-Float fTimeStep = 0.500001 Const; ;; 500 msec
-
+Int iFastTimerID = 1000 Const;
+Float fFastTimerStep = 0.500001 Const; ;; 500 msec
+Bool bResetMissionsQueued = False;
+Bool bInResetMissions = False;
+Bool bHandScanner = False;
 Float fTerminalDistanceOpen = 3.0 Const; ;; 3 meters
+String sStarfieldEsm = "Starfield.esm" Const;
 
-String StarfieldEsm = "Starfield.esm" Const;
-
-Int KYWD_AnimFurnTerminal_Standing = 0x0025E8DE Const 		;; KYWD
+Int KYWD_AnimFurnTerminal_Standing = 0x0025E8DE Const ;		;; KYWD
 Keyword AnimFurnTerminal_Standing = None;
-Int AVIF_MissionBoardAvailable_Supply = 0x0039F887      	;; AVIF
-ActorValue MissionBoardAvailable_Supply = None;
-Int AVIF_MissionBoardAvailable_Hunt = 0x0039F888      		;; AVIF
-ActorValue MissionBoardAvailable_Hunt = None;
+Int AVIF_HandScannerTarget = 0x0022A2B6 Const ;				;; AVIF
+ActorValue HandScannerTarget = None ;
+Int QUST_MB_Parent = 0x00015300 Const;						;; QUST
+MissionParentScript MB_Parent = None;
 
 Event OnInit()
 	Debug.Notification("MISSION BOARDS EVERYWHERE!\nMI$$IOИ BOAЯД$ ЭVEЯYФHEЯE!");
-	MissionBoardAvailable_Supply = Game.GetFormFromFile(AVIF_MissionBoardAvailable_Supply, StarfieldEsm) as ActorValue;
-	MissionBoardAvailable_Hunt = Game.GetFormFromFile(AVIF_MissionBoardAvailable_Hunt, StarfieldEsm) as ActorValue;
-	AnimFurnTerminal_Standing = Game.GetFormFromFile(KYWD_AnimFurnTerminal_Standing, StarfieldEsm) as Keyword;
-	Self.StartTimer(fTimeStep, iTimerID) ;
+	MB_Parent = Game.GetFormFromFile(QUST_MB_Parent, sStarfieldEsm) as MissionParentScript;
+	HandScannerTarget = Game.GetFormFromFile(AVIF_HandScannerTarget, sStarfieldEsm) as ActorValue;
+	AnimFurnTerminal_Standing = Game.GetFormFromFile(KYWD_AnimFurnTerminal_Standing, sStarfieldEsm) as Keyword;
+	Self.RegisterForRemoteEvent(Game.GetPlayer(), "OnPlayerScannedObject");
+	Self.RegisterForMenuOpenCloseEvent("MonocleMenu");
+	Self.StartTimer(fFastTimerStep, iFastTimerID) ;
+	ResetMissions(True);
 EndEvent
 
 ObjectReference[] Function FindStandingTerminalsNearby()
@@ -28,30 +32,57 @@ ObjectReference[] Function FindStandingTerminalsNearby()
 EndFunction
 
 Event OnTimer(Int aTimerID)
-	If aTimerID == iTimerID
-		ObjectReference[] generic_standing_terms = Self.FindStandingTerminalsNearby();
+	If aTimerID == iFastTimerID
+		ObjectReference[] generic_standing_terms = FindStandingTerminalsNearby();
 		Int I = 0;
 		While I < generic_standing_terms.Length
 			ObjectReference generic_standing_term = generic_standing_terms[I];
 			If generic_standing_term.IsEnabled() && generic_standing_term.Is3DLoaded()			
-				TerminalScript term = generic_standing_term as TerminalScript;				
-				If term && term.GetValue(MissionBoardAvailable_Supply) == 0.0 && term.GetValue(MissionBoardAvailable_Hunt) == 0.0
-					Debug.Notification("TERMINAL DETECTED\nЩЭЯMIИAЛ ДETEKTЭД");
-					Debug.ExecuteConsole(Utility.IntToHex((term as Form).GetFormID()) + ".AttachPapyrusScript MissionBoardActivatorScript");
-					Utility.Wait(2.0);
-					MissionBoardActivatorScript mbas = generic_standing_term as MissionBoardActivatorScript;
-					If mbas
-						mbas.SetValue(MissionBoardAvailable_Supply, 1.0);
-						mbas.SetValue(MissionBoardAvailable_Hunt, 1.0);
-						Debug.Notification("TERMINAL HACKED\nЩЭЯMIИAЛ ФАЦКЭД");
-					Else
-						Debug.Notification("NO ACCESS TO TERMINAL\nCYKA BLYAT DNIWE EBANOE");
-					EndIf
-				EndIf
+				generic_standing_term.SetValue(HandScannerTarget, 1.0);
+				generic_standing_term.SetRequiresScanning(true);
+				generic_standing_term.SetScanned(false);
 			EndIf
 			I += 1;
 		EndWhile
-		StartTimer(fTimeStep, iTimerID);
+		StartTimer(fFastTimerStep, iFastTimerID);
 	EndIf
 EndEvent
 
+Event Actor.OnPlayerScannedObject(Actor akSource, ObjectReference akScannedRef)
+	If akSource != Game.GetPlayer()
+		Return;
+	EndIf
+	If !akScannedRef.HasKeyword(AnimFurnTerminal_Standing)
+		Return;
+	EndIf
+	If bInResetMissions
+		Debug.Notification("NO ACCESS TO TERMINAL\nC**A B***T DN1WE E****E");
+		Utility.Wait(3.0);
+	EndIf
+	Debug.Notification("TERMINAL DETECTED\nЩЭЯMIИAЛ ДETEKTЭД");		
+	MB_Parent.UpdateMissions();
+	Debug.Notification("TERMINAL HACKED\nЩЭЯMIИAЛ ФАЦКЭД");		
+	Game.ShowMissionBoardMenu(None, Utility.RandomInt(1, 6));
+	bResetMissionsQueued = True;
+	akScannedRef.SetScanned(false);
+EndEvent
+
+Function ResetMissions(Bool abSilent = False)
+	bInResetMissions = True;
+	MB_Parent.ResetMissions(True, False, Game.GetPlayer().GetCurrentLocation(), True);
+	If (!abSilent)
+		Debug.Notification("QUEUED MISSIONS LIST RESET\nЖЦEУЭД MI$$IOИ$ ЛI$T ЯE$ЭT");		
+		Utility.Wait(3.0);
+	EndIf
+	bResetMissionsQueued = False;			
+	bInResetMissions = False;
+EndFunction
+
+Event OnMenuOpenCloseEvent(String asMenuName, Bool abOpening)
+	If asMenuName == "MonocleMenu" 
+		bHandScanner = abOpening;
+		If !bHandScanner && bResetMissionsQueued
+			ResetMissions();
+		EndIf
+	EndIf
+EndEvent
