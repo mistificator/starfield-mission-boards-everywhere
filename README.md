@@ -12,3 +12,4 @@ MISSION BOARDS EVERYWHERE! MI$$IOИ BOAЯД$ ЭVEЯYФHEЯE! - Starfield mod
       > bat mb
       
 3. Enjoy mission boards via your scanner when applied to some vertical operable terminals
+4. Use scanner on your pilot seat to get access to shipbuilder anywhere
