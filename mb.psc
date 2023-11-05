@@ -36,19 +36,15 @@ Event OnInit()
 EndEvent
 
 Event OnMenuOpenCloseEvent(String asMenuName, Bool abOpening)
-		If asMenuName == "MonocleMenu" 
-			If !abOpening && bResetMissionsQueued
-				ResetMissions();
-			EndIf
-			bHandScanner = abOpening;
-		EndIf	
-		If asMenuname == "SpaceshipEditorMenu"
-			If !abOpening
-				DeleteVendor();
-			EndIf
-	;;		Debug.Notification(asMenuName + " " + abOpening as String);
-			bSpaceShipEditor = abOpening;
+	If asMenuName == "MonocleMenu" 
+		bHandScanner = abOpening;
+		If !bHandScanner && bResetMissionsQueued
+			ResetMissions();
 		EndIf
+	EndIf	
+	If asMenuname == "SpaceshipEditorMenu"
+		bSpaceShipEditor = abOpening;
+	EndIf
 EndEvent
 
 Event OnTimer(Int aTimerID)
@@ -129,19 +125,25 @@ Function InitShipVendor()
 	SQ_PlayerShip = Game.GetFormFromFile(QUST_SQ_PlayerShip, sStarfieldEsm) as SQ_PlayerShipScript;
 	Self.RegisterForDistanceLessThanEvent(Game.GetPlayer() as ScriptObject, SQ_PlayerShip.PlayerShipPilotSeat.GetRef() as ScriptObject, fTerminalDistanceOpen, iPilotSeatIsNearID);	
 	OutpostShipbuilderVendor = Game.GetFormFromFile(NPC_OutpostShipbuilderVendor, sStarfieldEsm) as ActorBase;
+	Self.RegisterForCustomEvent(Game.GetPlayer() as ScriptObject, "Actor_OnHangarMenuQueued");
 EndFunction
 
 Function PilotSeatScanned(Actor akSource, ObjectReference akScannedRef)
+	If GetState() == "SpaceShipBuilder"
+		Return;
+	EndIf
+	GoToState("SpaceShipBuilder");
 	If iHangarMenuQueue == 0
 		iHangarMenuQueue += 1;
 		Debug.Notification("SHIP STORE DETECTED, WAIT\nШЦIП $TOЯE ДETEKTЭД, ЩАIT");	
 		
-		Self.RegisterForCustomEvent(Game.GetPlayer() as ScriptObject, "Actor_OnHangarMenuQueued");
 		Var[] args = new Var[2] ;
 		args[0] = akSource as Var;
 		args[1] = akScannedRef as Var;
 		Game.GetPlayer().SendCustomEvent("Actor_OnHangarMenuQueued", args);
+		Return;
 	EndIf
+	GoToState("None");
 EndFunction
 
 Event OnDistanceLessThan(ObjectReference akObj1, ObjectReference akObj2, Float afDistance, Int aiEventID)
@@ -154,46 +156,87 @@ Event OnDistanceLessThan(ObjectReference akObj1, ObjectReference akObj2, Float a
 EndEvent
 
 Event Actor.OnHangarMenuQueued(Actor akSender, Var[] akArgs)
-	Self.UnregisterForCustomEvent(Game.GetPlayer() as ScriptObject, "Actor_OnHangarMenuQueued");
-	If !bSpaceShipEditor
-		If iHangarMenuQueue > 0
-			iHangarMenuQueue -= 1;
-		EndIf
-		If iHangarMenuQueue == 0
-			ObjectReference akScannedRef = akArgs[1] as ObjectReference;
-			akScannedRef.SetScanned(false);
-			DeleteVendor();
-			CreateVendor();
-			ShowVendorMenu();	
-		EndIf	
+	If iHangarMenuQueue > 0
+		iHangarMenuQueue -= 1;
 	EndIf
 EndEvent
 
-Guard DeleteVendor_Guard;
 Function DeleteVendor()
-	Guard DeleteVendor_Guard;
-		If Vendor
+EndFunction
+
+Bool Function CreateVendor()
+	Return False;
+EndFunction
+
+Function ShowVendorMenu(Bool bForceRefresh = False)
+EndFunction
+
+State SpaceShipBuilder
+	Event Actor.OnHangarMenuQueued(Actor akSender, Var[] akArgs)
+		If iHangarMenuQueue > 0
+			iHangarMenuQueue -= 1;
+		EndIf
+		If !bSpaceShipEditor && bHandScanner && iHangarMenuQueue == 0
+			ObjectReference akScannedRef = akArgs[1] as ObjectReference;
+			akScannedRef.SetScanned(false);
+			If CreateVendor()
+				ShowVendorMenu(True);	
+			Else
+				Debug.Notification("NO ACCESS TO SHIP STORE\nC**A B***T DN1WE E****E");				
+			EndIf
+		EndIf	
+	EndEvent
+	
+	Event OnMenuOpenCloseEvent(String asMenuName, Bool abOpening)
+		If asMenuName == "MonocleMenu" 
+			bHandScanner = abOpening;
+		EndIf
+		If asMenuname == "SpaceshipEditorMenu" 
+			bSpaceShipEditor = abOpening;
+		EndIf
+		If asMenuname == "SpaceshipEditorMenu" || asMenuName == "MonocleMenu" 
+			If !abOpening
+				DeleteVendor();
+				bSpaceShipEditor = abOpening;
+				bHandScanner = abOpening;
+				GoToState("None");
+			EndIf
+		EndIf
+	EndEvent	
+
+	Function DeleteVendor()
+		If Vendor != None
 			Vendor.Delete();
 			Vendor = None;		
 		EndIf
-	EndGuard;
-EndFunction
+	EndFunction
+	
+	Bool Function CreateVendor()
+		DeleteVendor();
+		Vendor = SQ_PlayerShip.PlayerShip.GetRef().PlaceAtMe(OutpostShipbuilderVendor, 1, False, True, False, None, None, True) as ShipVendorScript;
+		If SQ_PlayerShip.PlayerShipLandingMarker && SQ_PlayerShip.PlayerShipLandingMarker.GetRef()
+			Vendor.myLandingMarker = SQ_PlayerShip.PlayerShipLandingMarker.GetRef(); 
+		Else
+			Vendor.myLandingMarker = Vendor.PlaceAtMe(Game.GetFormFromFile(59, sStarfieldEsm), 1, False, False, True, None, None, True) ; 
+		Endif
+		If !Vendor.InitializeOnLoad
+			DeleteVendor();
+			Return False;
+		EndIf		
+		If Vendor == None || Vendor.myLandingMarker == None
+			DeleteVendor();
+			Return False;
+		EndIf
+		Return True;
+	EndFunction
 
-Function CreateVendor()
-	Vendor = SQ_PlayerShip.PlayerShip.GetRef().PlaceAtMe(OutpostShipbuilderVendor, 1, False, True, True, None, None, True) as ShipVendorScript;
-	If SQ_PlayerShip.PlayerShipLandingMarker && SQ_PlayerShip.PlayerShipLandingMarker.GetRef()
-		Vendor.myLandingMarker = SQ_PlayerShip.PlayerShipLandingMarker.GetRef(); 
-	Else
-		Vendor.myLandingMarker = Vendor.PlaceAtMe(Game.GetFormFromFile(59, sStarfieldEsm), 1, False, False, True, None, None, True) ; 
-	Endif
-	If !Vendor.InitializeOnLoad
-		Vendor.Initialize(vendor.myLandingMarker);
-	EndIf
-;;	Debug.Notification("OutpostShipbuilderVendor " + (OutpostShipbuilderVendor as String) + "\nVendor " + (Vendor as String) + "\nVendor loc " + (Vendor.myLandingMarker as String) + "\nPlayer loc " + (Game.GetPlayer().GetCurrentLocation() as String));
-EndFunction
+	Function ShowVendorMenu(Bool bForceRefresh = False)
+		Debug.Notification("SHIP STORE HACKED\nШЦIП $TOЯE ФАЦКЭД");		
+		bSpaceShipEditor = True;
+		Vendor.CheckForInventoryRefresh(bForceRefresh);
+		Utility.Wait(0.5);
+		Vendor.myLandingMarker.ShowHangarMenu(0, Vendor, SQ_PlayerShip.PlayerShip.GetShipReference(), False);
+		Utility.Wait(0.5);
+	EndFunction	
+EndState
 
-Function ShowVendorMenu()
-	Debug.Notification("SHIP STORE HACKED\nШЦIП $TOЯE ФАЦКЭД");		
-	bSpaceShipEditor = True;
-	Vendor.myLandingMarker.ShowHangarMenu(0, Vendor, None, False);
-EndFunction
