@@ -94,17 +94,19 @@ ObjectReference[] Function FindStandingTerminalsNearby()
 EndFunction
 
 Function SearchForTerminals()
-	ObjectReference[] generic_standing_terms = FindStandingTerminalsNearby();
-	Int I = 0;
-	While I < generic_standing_terms.Length
-		ObjectReference generic_standing_term = generic_standing_terms[I];
-		If generic_standing_term.IsEnabled() && generic_standing_term.Is3DLoaded()			
-			generic_standing_term.SetValue(HandScannerTarget, 1.0);
-			generic_standing_term.SetRequiresScanning(true);
-			generic_standing_term.SetScanned(false);
-		EndIf
-		I += 1;
-	EndWhile
+	If bHandScanner
+		ObjectReference[] generic_standing_terms = FindStandingTerminalsNearby();
+		Int I = 0;
+		While I < generic_standing_terms.Length
+			ObjectReference generic_standing_term = generic_standing_terms[I];
+			If generic_standing_term.IsEnabled() && generic_standing_term.Is3DLoaded()			
+				generic_standing_term.SetValue(HandScannerTarget, 1.0);
+				generic_standing_term.SetRequiresScanning(true);
+				generic_standing_term.SetScanned(false);
+			EndIf
+			I += 1;
+		EndWhile
+	EndIf
 	StartTimer(fFastTimerStep, iFastTimerID);
 EndFunction
 
