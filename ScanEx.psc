@@ -13,6 +13,8 @@ String sStarfieldEsm = "Starfield.esm" Const;
 
 Int KYWD_AnimFurnTerminal_Standing = 0x0025E8DE Const ;		;; KYWD
 Keyword AnimFurnTerminal_Standing = None;
+Int ACTI_TradeAuthorityVendorKiosk = 0x001150B3 Const;		;; ACTI
+Form TradeAuthorityVendorKiosk = None;
 Int AVIF_HandScannerTarget = 0x0022A2B6 Const ;				;; AVIF
 ActorValue HandScannerTarget = None ;
 Int QUST_MB_Parent = 0x00015300 Const;						;; QUST
@@ -46,24 +48,18 @@ EndEvent
 
 Event OnMenuOpenCloseEvent(String asMenuName, Bool abOpening)
 	If asMenuName == "MonocleMenu" 
-		bHandScanner = abOpening;
-		GoToState("ResetMissions_State");
-		If !bHandScanner && bResetMissionsQueued
-			ResetMissions();
-		EndIf
-		GoToState("None");
+		ProcessMonocleMenu(abOpening);
 	EndIf	
 	If asMenuname == "SpaceshipEditorMenu"
-		bSpaceShipEditor = abOpening;
-		if !bSpaceShipEditor
-			ResetPilotSeat();
-		EndIf
+		ProcessSpaceEditorMenu(abOpening);
 	EndIf
 EndEvent
 
 Event OnTimer(Int aTimerID)
 	If aTimerID == iFastTimerID
-		SearchForTerminals();
+		If bHandScanner
+			SearchForTerminals();
+		EndIf
 	EndIf
 EndEvent
 
@@ -71,10 +67,10 @@ Event Actor.OnPlayerScannedObject(Actor akSource, ObjectReference akScannedRef)
 	If akSource != Game.GetPlayer()
 		Return;
 	EndIf
-	If akScannedRef.HasKeyword(AnimFurnTerminal_Standing)
+	If TerminalCondition(akScannedRef)
 		TerminalScanned(akSource, akScannedRef);
 	Else
-	If akScannedRef == SQ_PlayerShip.PlayerShipPilotSeat.GetRef()	
+	If PilotSeatCondition(akScannedRef)
 		PilotSeatScanned(akSource, akScannedRef);
 	EndIf
 	EndIf
@@ -86,23 +82,40 @@ Function InitTerminalsSearch()
 	MB_Parent = Game.GetFormFromFile(QUST_MB_Parent, sStarfieldEsm) as MissionParentScript;
 	HandScannerTarget = Game.GetFormFromFile(AVIF_HandScannerTarget, sStarfieldEsm) as ActorValue;
 	AnimFurnTerminal_Standing = Game.GetFormFromFile(KYWD_AnimFurnTerminal_Standing, sStarfieldEsm) as Keyword;
-	SearchForTerminals();
+	TradeAuthorityVendorKiosk = Game.GetFormFromFile(ACTI_TradeAuthorityVendorKiosk, sStarfieldEsm);
 	GoToState("ResetMissions_State");
 	ResetMissions(True);
 	GoToState("None");
+EndFunction
+
+Bool Function TerminalCondition(ObjectReference akScannedRef)
+	Return akScannedRef.HasKeyword(AnimFurnTerminal_Standing) || akScannedRef.GetBaseObject() == TradeAuthorityVendorKiosk;
 EndFunction
 
 Function TerminalScanned(Actor akSource, ObjectReference akScannedRef)
 	If GetState() == "ShowMissions_State"
 		Return;
 	EndIf
-	While GetState() != "None"
+	If GetState() != "None"
 		Debug.Notification("NO ACCESS TO TERMINAL\nC**A B***T DN1WE E****E");
-		Utility.Wait(3.0);
-	EndWhile
+		Return;
+	EndIf
 	GoToState("ShowMissions_State")
 	ShowMissions(akScannedRef);
 	GoToState("None");	
+EndFunction
+
+Function ProcessMonocleMenu(Bool abOpening)
+	bHandScanner = abOpening;
+	If bHandScanner
+		SearchForTerminals();
+	Else
+		If bResetMissionsQueued && GetState() != "ResetMissions_State"
+			GoToState("ResetMissions_State");
+			ResetMissions();
+		EndIf
+		GoToState("None");
+	EndIf
 EndFunction
 
 Function ShowMissions(ObjectReference akScannedRef)
@@ -119,24 +132,37 @@ State ShowMissions_State
 	EndFunction
 EndState
 
+ObjectReference[] Function ConcatArrays(ObjectReference[] arr1, ObjectReference[] arr2)
+	ObjectReference[] dst = new ObjectReference[0];
+	Int I = 0;
+	While I < arr1.Length
+		dst.Add(arr1[I], 1);
+		I += 1;
+	EndWhile	
+	I = 0;
+	While I < arr2.Length
+		dst.Add(arr2[I], 1);
+		I += 1;
+	EndWhile	
+	Return dst;
+EndFunction
+
 ObjectReference[] Function FindStandingTerminalsNearby()
-	Return (Game.GetPlayer() as ObjectReference).FindAllReferencesWithKeyword(AnimFurnTerminal_Standing, fTerminalDistanceOpen);
+	Return ConcatArrays(Game.GetPlayer().FindAllReferencesWithKeyword(AnimFurnTerminal_Standing, fTerminalDistanceOpen), Game.GetPlayer().FindAllReferencesOfType(TradeAuthorityVendorKiosk, fTerminalDistanceOpen));
 EndFunction
 
 Function SearchForTerminals()
-	If bHandScanner
-		ObjectReference[] generic_standing_terms = FindStandingTerminalsNearby();
-		Int I = 0;
-		While I < generic_standing_terms.Length
-			ObjectReference generic_standing_term = generic_standing_terms[I];
-			If generic_standing_term.IsEnabled() && generic_standing_term.Is3DLoaded()			
-				generic_standing_term.SetValue(HandScannerTarget, 1.0);
-				generic_standing_term.SetRequiresScanning(true);
-				generic_standing_term.SetScanned(false);
-			EndIf
-			I += 1;
-		EndWhile
-	EndIf
+	ObjectReference[] generic_standing_terms = FindStandingTerminalsNearby();
+	Int I = 0;
+	While I < generic_standing_terms.Length
+		ObjectReference generic_standing_term = generic_standing_terms[I];
+		If generic_standing_term.IsEnabled() && generic_standing_term.Is3DLoaded()			
+			generic_standing_term.SetValue(HandScannerTarget, 1.0);
+			generic_standing_term.SetRequiresScanning(true);
+			generic_standing_term.SetScanned(false);
+		EndIf
+		I += 1;
+	EndWhile
 	StartTimer(fFastTimerStep, iFastTimerID);
 EndFunction
 
@@ -176,6 +202,10 @@ Function InitShipVendor()
 	(Game.GetFormFromFile(GLOB_ShipBuilderTestModules, sStarfieldEsm) as GlobalVariable).SetValue(1.0);       ;; enable test modules
 EndFunction
 
+Bool Function PilotSeatCondition(ObjectReference akScannedRef)
+	Return akScannedRef == SQ_PlayerShip.PlayerShipPilotSeat.GetRef();
+EndFunction
+
 Function PilotSeatScanned(Actor akSource, ObjectReference akScannedRef)
 	Guard SpaceShipBuilder_Guard;
 		While (GetState() != "None")
@@ -185,6 +215,13 @@ Function PilotSeatScanned(Actor akSource, ObjectReference akScannedRef)
 		Debug.Notification("SHIP STORE DETECTED, WAIT\nШЦIП $TOЯE ДETEKTЭД, ЩАIT");	
 		CreateHangar();
 	EndGuard
+EndFunction
+
+Function ProcessSpaceEditorMenu(Bool abOpening)
+	bSpaceShipEditor = abOpening;
+	if !bSpaceShipEditor
+		ResetPilotSeat();
+	EndIf
 EndFunction
 
 Event OnDistanceLessThan(ObjectReference akObj1, ObjectReference akObj2, Float afDistance, Int aiEventID)
