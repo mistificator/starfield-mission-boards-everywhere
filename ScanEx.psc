@@ -1,8 +1,8 @@
 ScriptName ScanEx Extends ScriptObject
 
-Bool bResetMissionsQueued = False Global;
-Bool bHandScanner = False Global;
-Bool bSpaceShipEditor = False Global;
+Bool bResetMissionsQueued = False;
+Bool bHandScanner = False;
+Bool bSpaceShipEditor = False;
 Int iPilotSeatIsNearID = 1000 Const;
 ShipVendorScript ShipVendor = None;
 String ShipVendorName = "";
@@ -24,6 +24,9 @@ Int GLOB_ShipBuilderTestModules = 0x00141C71;				;; GLOB
 
 Int NPC_OutpostShipbuilderVendor = 0x0002F8FD;				;; NPC_
 Int NPC_NeonStroudStore_KioskVendor = 0x00151488;			;; NPC_
+
+Int MESG_OutpostShipbuilderMessage = 0x0002F8FE;			;; MESG
+Int MESG_ShipbuilderActivatorMessage = 0x0002EE15;			;; MESG
       
 Struct ShipVendorStruct
 	Form ShipVendor = None;
@@ -33,18 +36,43 @@ ShipVendorStruct[] ShipVendors;
 
 ;; ---- Common part -----
 
+Function Tip(String v1, String v2 = "", String v3 = "", String v4 = "", String v5 = "", String v6 = "", String v7 = "", String v8 = "", String v9 = "", String v10 = "")
+	Debug.Notification(v1 + v2 + v3 + v4 + v5 + v6 + v7 + v8 + v9 + v10);
+EndFunction
+
+Bool DebugBuild = False Const;
+Function Dbg(String v1, String v2 = "", String v3 = "", String v4 = "", String v5 = "", String v6 = "", String v7 = "", String v8 = "", String v9 = "", String v10 = "")
+	If DebugBuild == True
+		Debug.Notification("DEBUG:\n" + v1 + v2 + v3 + v4 + v5 + v6 + v7 + v8 + v9 + v10);
+	EndIf
+EndFunction
+
+Function DbgObj(ObjectReference obj_ref)
+	If DebugBuild
+		String ID = Utility.IntToHex((obj_ref as Form).GetFormID());
+		Debug.ExecuteConsole(ID + ".ShowVars");
+	EndIf
+EndFunction
+
 Event OnInit()
-	Debug.Notification("USE SCANEX EVERYWHERE!\nЮЗE $ЦAИЭX ЭVEЯYФHEЯE!");
+	Tip("USE SCANEX EVERYWHERE!", "\n", "ЮЗE $ЦAИЭX ЭVEЯYФHEЯE!");
 	Self.RegisterForRemoteEvent(Game.GetPlayer(), "OnPlayerScannedObject");
 	Self.RegisterForRemoteEvent(Game.GetPlayer(), "OnLocationChange");
+	Self.RegisterForRemoteEvent(Game.GetPlayer(), "OnEnterShipInterior");
+	Self.RegisterForRemoteEvent(Game.GetPlayer(), "OnExitShipInterior");
 	Self.RegisterForMenuOpenCloseEvent("MonocleMenu");
-	Self.RegisterForMenuOpenCloseEvent("SpaceshipEditorMenu") ; 
 
-	InitShipVendor();
-	InitTerminalsSearch();
+	SQ_PlayerShip = Game.GetFormFromFile(QUST_SQ_PlayerShip, sStarfieldEsm) as SQ_PlayerShipScript;
+	MB_Parent = Game.GetFormFromFile(QUST_MB_Parent, sStarfieldEsm) as MissionParentScript;
+	HandScannerTarget = Game.GetFormFromFile(AVIF_HandScannerTarget, sStarfieldEsm) as ActorValue;
+	AnimFurnTerminal_Standing = Game.GetFormFromFile(KYWD_AnimFurnTerminal_Standing, sStarfieldEsm) as Keyword;
+	TradeAuthorityVendorKiosk = Game.GetFormFromFile(ACTI_TradeAuthorityVendorKiosk, sStarfieldEsm);
+
+	UpdateLocationChange();
 EndEvent
 
 Event OnMenuOpenCloseEvent(String asMenuName, Bool abOpening)
+	Dbg(asMenuName, " ", abOpening as String, ", state ", GetState());
 	If asMenuName == "MonocleMenu" 
 		ProcessMonocleMenu(abOpening);
 	EndIf	
@@ -54,34 +82,76 @@ Event OnMenuOpenCloseEvent(String asMenuName, Bool abOpening)
 EndEvent
 
 Event Actor.OnPlayerScannedObject(Actor akSource, ObjectReference akScannedRef)
+	If GetState() != "None"
+		Return;
+	EndIf
 	If akSource != Game.GetPlayer()
 		Return;
 	EndIf
+	Dbg("Scanned ", akScannedRef as String);
 	If TerminalCondition(akScannedRef)
 		TerminalScanned(akSource, akScannedRef);
-	Else
-	If PilotSeatCondition(akScannedRef)
+	ElseIf PilotSeatCondition(akScannedRef)
 		PilotSeatScanned(akSource, akScannedRef);
-	EndIf
 	EndIf
 EndEvent
 
+Function UpdateLocationChange()
+	If IsInShip()
+		InitShipVendor();
+	Else
+		InitTerminalsSearch();
+	EndIf		
+EndFunction
+
 ;;; -- take a look at first parameter --
 Event Actor.OnLocationChange(Actor akSender, Location akOldLoc, Location akNewLoc)
-	SearchAndReloadTerminals();
+	If akSender != Game.GetPlayer()
+		Return;
+	EndIf
+	UpdateLocationChange();
+EndEvent
+
+;;; -- take a look at first parameter --
+Event Actor.OnEnterShipInterior(Actor akSender, ObjectReference akShip)
+	If akSender != Game.GetPlayer()
+		Return;
+	EndIf
+	Self.RegisterForMenuOpenCloseEvent("SpaceshipEditorMenu") ; 
+EndEvent
+
+;;; -- take a look at first parameter --
+Event Actor.OnExitShipInterior(Actor akSender, ObjectReference akShip)
+	If akSender != Game.GetPlayer()
+		Return;
+	EndIf
+	Self.UnRegisterForMenuOpenCloseEvent("SpaceshipEditorMenu") ;
 EndEvent
 
 ;; ---- Mission boards ------------
 
 Function InitTerminalsSearch()
-	MB_Parent = Game.GetFormFromFile(QUST_MB_Parent, sStarfieldEsm) as MissionParentScript;
-	HandScannerTarget = Game.GetFormFromFile(AVIF_HandScannerTarget, sStarfieldEsm) as ActorValue;
-	AnimFurnTerminal_Standing = Game.GetFormFromFile(KYWD_AnimFurnTerminal_Standing, sStarfieldEsm) as Keyword;
-	TradeAuthorityVendorKiosk = Game.GetFormFromFile(ACTI_TradeAuthorityVendorKiosk, sStarfieldEsm);
 	GoToState("ResetMissions_State");
 	ResetMissions(True);
 	GoToState("None");
 	SearchAndReloadTerminals();
+EndFunction
+
+ObjectReference Function ReCreateObject(ObjectReference obj_ref)
+	Float[] Coords = new Float[6];
+	Coords[0] = obj_ref.X;
+	Coords[1] = obj_ref.Y;
+	Coords[2] = obj_ref.Z;
+	Coords[3] = obj_ref.GetAngleX();
+	Coords[4] = obj_ref.GetAngleY();
+	Coords[5] = obj_ref.GetAngleZ();			
+	ObjectReference new_obj_ref = Game.GetPlayer().PlaceAtMe(obj_ref.GetBaseObject(), 1, True, True, False, None, None, True);
+	new_obj_ref.SetPosition(Coords[0], Coords[1], Coords[2]);
+	new_obj_ref.SetAngle(Coords[3], Coords[4], Coords[5]);
+	new_obj_ref.Enable(False);	
+	obj_ref.Delete();
+	obj_ref = new_obj_ref;
+	Return obj_ref;
 EndFunction
 
 Guard SearchAndReloadTerminals_Guard
@@ -90,30 +160,15 @@ Function SearchAndReloadTerminals()
 	ObjectReference[] obj_refs = SearchForTerminals(20000.0);
 	Int I = 0;
 	While I < obj_refs.Length
-		If (obj_refs[I].GetBaseObject() == TradeAuthorityVendorKiosk)
-			
-			Float[] Coords = new Float[6];
-			Coords[0] = obj_refs[I].X;
-			Coords[1] = obj_refs[I].Y;
-			Coords[2] = obj_refs[I].Z;
-			Coords[3] = obj_refs[I].GetAngleX();
-			Coords[4] = obj_refs[I].GetAngleY();
-			Coords[5] = obj_refs[I].GetAngleZ();			
-			ObjectReference new_obj_ref = Game.GetPlayer().PlaceAtMe(TradeAuthorityVendorKiosk, 1, True, True, False, None, None, True);
-			new_obj_ref.SetPosition(Coords[0], Coords[1], Coords[2]);
-			new_obj_ref.SetAngle(Coords[3], Coords[4], Coords[5]);
-			InitTerminal(new_obj_ref);
-			new_obj_ref.Enable(False);
-			
-			obj_refs[I].Delete();
-			obj_refs[I] = new_obj_ref;
-
-;;			String ID = Utility.IntToHex((obj_refs[I] as Form).GetFormID());
-;;			Debug.ExecuteConsole(ID + ".ShowVars");
+		If (obj_refs[I].GetBaseObject() == TradeAuthorityVendorKiosk)	
+			InitTerminal(ReCreateObject(obj_refs[I]));
+			DbgObj(obj_refs[I]);
 		EndIf
 		I += 1;
 	EndWhile
-	Debug.Notification(I as String + " TERMINALS FOUND\n" + I as String + " ЩЭЯMIИAЛ$ ЪOУИД\n");
+	If I > 0
+		Tip(I as String, " TERMINALS FOUND", "\n", I as String, " ЩЭЯMIИAЛ$ ЪOУИД");
+	EndIf
 	EndGuard
 EndFunction
 
@@ -126,7 +181,7 @@ Function TerminalScanned(Actor akSource, ObjectReference akScannedRef)
 		Return;
 	EndIf
 	If GetState() != "None"
-		Debug.Notification("NO ACCESS TO TERMINAL\nC**A B***T DN1WE E****E");
+		Tip("NO ACCESS TO TERMINAL", "\n", "C**A B***T DN1WE E****E");
 		Return;
 	EndIf
 	GoToState("ShowMissions_State")
@@ -137,11 +192,12 @@ EndFunction
 Function ProcessMonocleMenu(Bool abOpening)
 	bHandScanner = abOpening;
 	If !bHandScanner
-		If bResetMissionsQueued && GetState() != "ResetMissions_State"
+		If bResetMissionsQueued && GetState() == "None"
 			GoToState("ResetMissions_State");
 			ResetMissions();
 		EndIf
 		GoToState("None");
+		ResetPilotSeat();
 	EndIf
 EndFunction
 
@@ -150,9 +206,9 @@ EndFunction
 
 State ShowMissions_State
 	Function ShowMissions(ObjectReference akScannedRef)
-		Debug.Notification("TERMINAL DETECTED\nЩЭЯMIИAЛ ДETEKTЭД");		
+		Tip("TERMINAL DETECTED", "\n", "ЩЭЯMIИAЛ ДETEKTЭД");		
 		MB_Parent.UpdateMissions();
-		Debug.Notification("TERMINAL HACKED\nЩЭЯMIИAЛ ФАЦКЭД");		
+		Tip("TERMINAL HACKED", "\n", "ЩЭЯMIИAЛ ФАЦКЭД");		
 		Game.ShowMissionBoardMenu(None, Utility.RandomInt(1, 6));
 		bResetMissionsQueued = True;
 		akScannedRef.SetScanned(false);	
@@ -207,7 +263,7 @@ State ResetMissions_State
 	Function ResetMissions(Bool abSilent = False)
 		MB_Parent.ResetMissions(True, False, Game.GetPlayer().GetCurrentLocation(), True);
 		If (!abSilent)
-			Debug.Notification("QUEUED MISSIONS LIST RESET\nЖЦEУЭД MI$$IOИ$ ЛI$T ЯE$ЭT");		
+			Tip("QUEUED MISSIONS LIST RESET", "\n", "ЖЦEУЭД MI$$IOИ$ ЛI$T ЯE$ЭT");		
 			Utility.Wait(3.0);
 		EndIf
 		bResetMissionsQueued = False;			
@@ -220,8 +276,8 @@ EndState
 Guard SpaceShipBuilder_Guard;
 
 Function InitShipVendor()
-	SQ_PlayerShip = Game.GetFormFromFile(QUST_SQ_PlayerShip, sStarfieldEsm) as SQ_PlayerShipScript;
 	Self.RegisterForDistanceLessThanEvent(Game.GetPlayer() as ScriptObject, SQ_PlayerShip.PlayerShipPilotSeat.GetRef() as ScriptObject, 3.0, iPilotSeatIsNearID);	
+	Self.RegisterForMenuOpenCloseEvent("SpaceshipEditorMenu") ; 
 
 	ShipVendors = new ShipVendorStruct[0];
 	ShipVendors.Add(new ShipVendorStruct, 1);
@@ -233,20 +289,25 @@ Function InitShipVendor()
 
 	(Game.GetFormFromFile(GLOB_ShipBuilderAllowLargeModules, sStarfieldEsm) as GlobalVariable).SetValue(1.0); ;; enable M modules
 	(Game.GetFormFromFile(GLOB_ShipBuilderTestModules, sStarfieldEsm) as GlobalVariable).SetValue(1.0);       ;; enable test modules
+
+	GoToState("None");
 EndFunction
 
 Bool Function PilotSeatCondition(ObjectReference akScannedRef)
 	Return akScannedRef == SQ_PlayerShip.PlayerShipPilotSeat.GetRef();
 EndFunction
 
+Bool Function IsInShip()
+	Return Game.GetPlayer().IsInLocation(SQ_PlayerShip.PlayerShipInteriorLocation.GetLocation());
+EndFunction
+
 Function PilotSeatScanned(Actor akSource, ObjectReference akScannedRef)
-	Guard SpaceShipBuilder_Guard;
-		While (GetState() != "None")
-			Utility.Wait(1.0);
-		EndWhile
-		GoToState("CreateHangar_State");
-		Debug.Notification("SHIP STORE DETECTED, WAIT\nШЦIП $TOЯE ДETEKTЭД, ЩАIT");	
-		CreateHangar();
+	Guard SpaceShipBuilder_Guard
+		If GetState() == "None"
+			GoToState("CreateHangar_State");
+			Tip("SHIP STORE DETECTED, WAIT", "\n", "ШЦIП $TOЯE ДETEKTЭД, ЩАIT");	
+			CreateHangar();
+		EndIf
 	EndGuard
 EndFunction
 
@@ -259,12 +320,13 @@ EndFunction
 
 Event OnDistanceLessThan(ObjectReference akObj1, ObjectReference akObj2, Float afDistance, Int aiEventID)
 	If aiEventID == iPilotSeatIsNearID
-		Debug.Notification("PILOT SEAT PATCHED\nЗИЛОТ ЗЭAT ПATЦЧЭД");
+		Tip("PILOT SEAT PATCHED", "\n", "ЗИЛОТ ЗЭAT ПATЦЧЭД");
 		ResetPilotSeat();
 	EndIf
 EndEvent
 
 Function ResetPilotSeat()
+	Dbg("ResetPilotSeat");
 	SQ_PlayerShip.PlayerShipPilotSeat.GetRef().SetValue(HandScannerTarget, 1.0);
 	SQ_PlayerShip.PlayerShipPilotSeat.GetRef().SetRequiresScanning(true);
 	SQ_PlayerShip.PlayerShipPilotSeat.GetRef().SetScanned(false);	
@@ -275,6 +337,7 @@ EndFunction
 
 Function DeleteShipVendor()
 	If ShipVendor != None
+		Dbg("DeleteShipVendor");
 		ShipVendor.Delete();
 		ShipVendor = None;		
 	EndIf
@@ -287,67 +350,95 @@ EndFunction
 Function ShowVendorMenu(Bool bForceRefresh = False)
 EndFunction
 
+Function ShipBuilderCleanup()
+	DeleteShipVendor();
+	GoToState("None");
+	ResetPilotSeat();
+EndFunction
+
 State CreateHangar_State
 	Function CreateHangar()
-		Guard SpaceShipBuilder_Guard;
-			If !bSpaceShipEditor && bHandScanner && GetState() == "CreateHangar_State"
-				GoToState("ShowHangar_State");
+		Guard SpaceShipBuilder_Guard
+			If !bSpaceShipEditor && GetState() == "CreateHangar_State"
+				GoToState("CreateVendor_State");
 				If CreateShipVendor()
+					GoToState("ShowVendor_State");
 					ShowVendorMenu(True);	
 				Else
-					Debug.Notification("NO ACCESS TO SHIP STORE\nC**A B***T DN1WE E****E");				
-					GoToState("None");
-					ResetPilotSeat();
+					Tip("NO ACCESS TO SHIP STORE", "\n", "C**A B***T DN1WE E****E");				
+					ShipBuilderCleanup();
 				EndIf
+			Else
+				ShipBuilderCleanup();
 			EndIf	
 		EndGuard
 	EndFunction
 EndState
 
-State ShowHangar_State
+State CreateVendor_State
 	Bool Function CreateShipVendor()
-		DeleteShipVendor();
-		ShipVendorStruct Entry = new ShipVendorStruct;
-		Entry = ShipVendors[Utility.RandomInt(0, ShipVendors.Length - 1)];
-		ShipVendor = SQ_PlayerShip.PlayerShip.GetRef().PlaceAtMe(Entry.ShipVendor, 1, False, True, False, None, None, True) as ShipVendorScript;
-		If SQ_PlayerShip.PlayerShipLandingMarker && SQ_PlayerShip.PlayerShipLandingMarker.GetRef()
-			ShipVendor.myLandingMarker = SQ_PlayerShip.PlayerShipLandingMarker.GetRef(); 
-		Else
-			ShipVendor.myLandingMarker = ShipVendor.PlaceAtMe(Game.GetFormFromFile(59, sStarfieldEsm), 1, False, False, True, None, None, True) ; 
-		Endif
-		If !ShipVendor.InitializeOnLoad
-			DeleteShipVendor();
-			Return False;
-		EndIf		
-		If ShipVendor == None || ShipVendor.myLandingMarker == None
-			DeleteShipVendor();
-			Return False;
-		EndIf
-		ShipVendorName = Entry.Name;
-		Return True;
+		Guard SpaceShipBuilder_Guard;
+			If GetState() == "CreateVendor_State"
+				DeleteShipVendor();
+				ShipVendorStruct Entry = new ShipVendorStruct;
+				Entry = ShipVendors[Utility.RandomInt(0, ShipVendors.Length - 1)];
+				ShipVendor = SQ_PlayerShip.PlayerShip.GetRef().PlaceAtMe(Entry.ShipVendor, 1, False, True, False, None, None, True) as ShipVendorScript;
+				If SQ_PlayerShip.PlayerShipLandingMarker && SQ_PlayerShip.PlayerShipLandingMarker.GetRef()
+					ShipVendor.MyLandingMarker = SQ_PlayerShip.PlayerShipLandingMarker.GetRef(); 
+				Else
+					ShipVendor.MyLandingMarker = ShipVendor.PlaceAtMe(Game.GetFormFromFile(59, sStarfieldEsm), 1, False, False, True, None, None, True) ; 
+				Endif
+				If !ShipVendor.InitializeOnLoad
+					Return False;
+				EndIf		
+				If ShipVendor == None || ShipVendor.MyLandingMarker == None
+					Return False;
+				EndIf
+				ShipVendorName = Entry.Name;
+				Return True;
+			Else
+				Return False;
+			EndIf
+		EndGuard
 	EndFunction
+EndState
 
+State ShowVendor_State
 	Function ShowVendorMenu(Bool bForceRefresh = False)
-		Debug.Notification(ShipVendorName + "SHIP STORE HACKED\nШЦIП $TOЯE ФАЦКЭД");	
-		bSpaceShipEditor = True;
-		ShipVendor.CheckForInventoryRefresh(bForceRefresh);
-		ShipVendor.myLandingMarker.ShowHangarMenu(0, ShipVendor as Actor, None, False);
-		GoToState("WaitForShopping_State");
+		Guard SpaceShipBuilder_Guard;
+			If GetState() == "ShowVendor_State"
+				Tip(ShipVendorName, "SHIP STORE HACKED", "\n", "ШЦIП $TOЯE ФАЦКЭД");	
+				GoToState("WaitForShopping_State");
+				ShipVendor.CheckForInventoryRefresh(bForceRefresh);
+;;				Int iAnswer = (Game.GetFormFromFile(MESG_OutpostShipbuilderMessage, sStarfieldEsm) as Message).Show(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+				Int iAnswer = (Game.GetFormFromFile(MESG_ShipbuilderActivatorMessage, sStarfieldEsm) as Message).Show(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+				Dbg(iAnswer as String);
+				If (iAnswer >= 0)
+					ShipVendor.MyLandingMarker.ShowHangarMenu(0, ShipVendor as Actor, None, iAnswer as Bool);
+				Else
+					ShipBuilderCleanup();
+				EndIf
+			Else
+				ShipBuilderCleanup();
+			EndIf
+		EndGuard
 	EndFunction	
 EndState
 
 State WaitForShopping_State
 	Event OnMenuOpenCloseEvent(String asMenuName, Bool abOpening)
-		Guard SpaceShipBuilder_Guard;
+		Dbg(asMenuName, " ", abOpening as String, ", state ", GetState());
+		Guard SpaceShipBuilder_Guard
 			If asMenuName == "MonocleMenu" 
 				bHandScanner = abOpening;
+				;; 'we are on the wrong side of it
+				abOpening = False;
+				asMenuname = "SpaceshipEditorMenu";
 			EndIf
 			If asMenuname == "SpaceshipEditorMenu" 
 				bSpaceShipEditor = abOpening;
-				If !abOpening
-					DeleteShipVendor();
-					GoToState("None");
-					ResetPilotSeat();
+				If !bSpaceShipEditor
+					ShipBuilderCleanup();
 				EndIf
 			EndIf
 		EndGuard
