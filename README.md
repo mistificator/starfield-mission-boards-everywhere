@@ -3,24 +3,38 @@ USE SCANEX EVERYWHERE!\nЮЗE $ЦAИЭX ЭVEЯYФHEЯE! - Starfield ScanEx mod
 
 # Install and update
 
-How to get access to your personal extended scanner
+How to get access to your personal extended scanner ScanEx
 
-1. Unpack file 
+1. Download
 
-            ScanEx.zip
+> ScanEx.zip
+
+  and (optionally) download
+
+> ScanEx_Install.cmd
+
+  from [releases](https://github.com/mistificator/starfield-scan-ex/releases) section
+
+2. Run
+
+> ScanEx_Install.cmd
+  
+  or manually unpack file 
+
+> ScanEx.zip
       
-   from [releases](https://github.com/mistificator/starfield-scan-ex/releases) section to
+  to
    
             %USERPROFILE%\Documents\My Games\
-      
-3. Open Starfield console via ` and enter
+            
+3. Run Starfield, open console via ` and enter
 
             bat ScanEx
       
-   this will install (and update) ScanEx
+  This will apply (and update) ScanEx
       
-5. Enjoy mission boards via your scanner when applied to some vertical operable terminals
-6. Use scanner on your pilot seat to get access to shipbuilder anywhere
+4. Enjoy mission boards via your scanner when applied to some vertical operable terminals
+5. Use scanner on your pilot seat to get access to shipbuilder anywhere
 
 
 # Uninstall
