@@ -54,12 +54,13 @@ Function DbgObj(ObjectReference obj_ref)
 	EndIf
 EndFunction
 
-Event OnInit()
+Function InitScanEx()
 	Tip("USE SCANEX EVERYWHERE!", "\n", "ЮЗE $ЦAИЭX ЭVEЯYФHEЯE!");
 	Self.RegisterForRemoteEvent(Game.GetPlayer(), "OnPlayerScannedObject");
 	Self.RegisterForRemoteEvent(Game.GetPlayer(), "OnLocationChange");
 	Self.RegisterForRemoteEvent(Game.GetPlayer(), "OnEnterShipInterior");
 	Self.RegisterForRemoteEvent(Game.GetPlayer(), "OnExitShipInterior");
+	Self.RegisterForRemoteEvent(Game.GetPlayer(), "OnPlayerLoadGame");
 	Self.RegisterForMenuOpenCloseEvent("MonocleMenu");
 
 	SQ_PlayerShip = Game.GetFormFromFile(QUST_SQ_PlayerShip, sStarfieldEsm) as SQ_PlayerShipScript;
@@ -69,6 +70,14 @@ Event OnInit()
 	TradeAuthorityVendorKiosk = Game.GetFormFromFile(ACTI_TradeAuthorityVendorKiosk, sStarfieldEsm);
 
 	UpdateLocationChange();
+EndFunction
+
+Event OnInit()
+	InitScanEx();
+EndEvent
+
+Event Actor.OnPlayerLoadGame()
+	InitScanEx();
 EndEvent
 
 Event OnMenuOpenCloseEvent(String asMenuName, Bool abOpening)
