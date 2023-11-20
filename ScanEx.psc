@@ -38,9 +38,8 @@ Struct ShipVendorStruct
 EndStruct
 ShipVendorStruct[] ShipVendors;
 
-ObjectReference CurrentPlace = None;
 SpaceShipReference CurrentShip = None;
-Bool CurrentShipIsLanded = False;
+SpaceShipReference HomeShip = None;
 
 ;; ---- Common part -----
 
@@ -83,8 +82,6 @@ Function InitScanEx()
 	MB_Parent = GetFormProperty(RC(ACTI_MissionBoardConsole_ALL), "MB_Parent") as MissionParentScript;	
 ;;	MB_Parent = RC(QUST_MB_Parent) as MissionParentScript; ;;' don't do this
 	HandScannerTarget = RC(AVIF_HandScannerTarget) as ActorValue;	
-
-;;	Dbg(Game.GetPlayer().GetCurrentShipRef() as String, "\n", SQ_PlayerShip.PlayerShip.GetRef());	
 	
 	UpdateLocationChange();
 EndFunction
@@ -360,8 +357,8 @@ EndFunction
 Function ProcessSpaceEditorMenu(Bool abOpening)
 	bSpaceShipEditor = abOpening;
 	if !bSpaceShipEditor
-		ShipBuilderCleanup();	
 		RestoreShip();
+		ShipBuilderCleanup();	
 	EndIf
 EndFunction
 
@@ -473,32 +470,27 @@ State ShowVendor_State
 EndState
 
 Function StoreShip()
-	CurrentPlace = None;
 	CurrentShip = None;
+	HomeShip = None;
 	If IsInShip()
-		CurrentShip = Game.GetPlayer().GetCurrentShipRef();
-		CurrentShipIsLanded = CurrentShip.IsLanded();
-		CurrentPlace = CurrentShip.PlaceAtMe(RC(59), 1, False, False, False, None, None, False) ; 
-		CurrentPlace.MoveTo(CurrentPlace, -0.00000, 0.0, 0.0, True, False);
+		CurrentShip = SQ_PlayerShip.PlayerShip.GetShipRef();		
+		If CurrentShip == SQ_PlayerShip.HomeShip.GetShipRef();
+			HomeShip = SQ_PlayerShip.HomeShip.GetShipRef();
+			SQ_PlayerShip.ResetHomeShip(SQ_PlayerShip.Frontier_ModularREF as SpaceShipReference);
+		EndIf
+		SQ_PlayerShip.RemovePlayerShip(CurrentShip);
 	EndIf	
 EndFunction
 
 Function RestoreShip()
-	If IsInShip() && CurrentPlace as Bool && CurrentShip as Bool
-		If !CurrentShip.IsInLocation(CurrentPlace.GetCurrentLocation())
-			If !CurrentShipIsLanded
-				CurrentShip.MoveTo(CurrentPlace, 0.00000, 0.0, 0.0, True, False);
-				Game.FastTravel(CurrentShip);
-				Utility.Wait(1.0);
-			EndIf
-		ElseIf CurrentShipIsLanded
-			CurrentShip.MoveTo(CurrentPlace, 0.00000, 0.0, 0.0, True, False);
-			Game.FastTravel(CurrentShip);
-			Utility.Wait(1.0);			
-		EndIf
-		CurrentPlace.Delete();
-		CurrentPlace = None;
+	If CurrentShip as Bool
+		SQ_PlayerShip.AddPlayerOwnedShip(CurrentShip);
+		SQ_PlayerShip.ResetPlayerShip(CurrentShip);
 		CurrentShip = None;
+		If HomeShip
+			SQ_PlayerShip.ResetHomeShip(HomeShip);
+			HomeShip = None;
+		EndIf
 	EndIf
 EndFunction
 
@@ -516,8 +508,8 @@ State WaitForShopping_State
 				bSpaceShipEditor = abOpening;
 				If bSpaceShipEditor
 				Else
-					ShipBuilderCleanup();				
 					RestoreShip();
+					ShipBuilderCleanup();				
 				EndIf
 			EndIf
 		EndGuard
