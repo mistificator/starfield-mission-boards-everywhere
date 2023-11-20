@@ -33,7 +33,7 @@ How to get access to your personal extended scanner ScanEx
       
   This will apply (and update) ScanEx
       
-4. Enjoy mission boards via your scanner when applied to some vertical operable terminals
+4. Enjoy mission boards via your scanner when applied to terminals
 5. Use scanner on your pilot seat to get access to shipbuilder anywhere
 
 
